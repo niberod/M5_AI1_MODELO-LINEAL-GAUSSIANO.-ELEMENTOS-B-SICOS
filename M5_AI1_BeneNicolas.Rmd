@@ -1,0 +1,319 @@
+---
+title: Módulo 5 Actividad 1
+subtitle: Modelo Lineal Gaussiano. Elementos básicos
+author: Nicolás Bene
+output: pdf_document
+---
+
+# Descripción de la tarea
+
+Dentro del paquete de R “car” se encuentra una base de datos de salarios de profesorado de universidad con las siguientes variables:
+
+      * rank - 3 niveles de cargos de profesor. 
+      * discipline - tipo de enseñanza que imparte. 
+      * yrs.since.phd - años desde el doctorado. 
+      * yrs.service - años de servicio. 
+      * sex – género. 
+      * salary - salario en dólares. 
+
+Primero que nada, cargo los paquetes a usar:
+```{r librerias, message=F,warning=F}
+library(car)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(janitor))
+
+#Saco notación científica
+options(scipen=999)
+
+```
+También cargo las librerías que vienen en el script function, a efectos de usar las funciones vistas durante el curso. En el siguiente chunk de código se debe modificar la dirección donde se tiene guardado el mismo.
+
+```{r cargo funciones de script Functions, echo=FALSE,warning=FALSE,message=FALSE}
+suppressPackageStartupMessages(source("../Datos/Functions.R"))
+```
+
+
+Posteriormente cargo la base de datos de salarios de profesorado de universidad. Realizo un summary de los datos para poder comprender mejor a los mismos.
+```{r carga datos}
+data(Salaries)
+
+Salaries %>% 
+     summary
+```
+
+
+Lo primero que se observa es que ninguna variable posee valores missing. 
+Por otra parte, la variable rank tiene 3 niveles tal como se menciona en la descripción de la misma, y discipline tiene dos categorías. También se puede observar el rango de las tres variables cuantitativas del dataset (yrs.since.phd, yrs.service y salary).
+
+Chequeo también si existen valores duplicados en términos de todas las variables
+
+```{r reviso si hay duplicados, warning=F,message=F}
+Salaries %>% 
+            get_dupes() 
+
+```
+Se observan que hay 3 registros duplicados en términos de todas las variables.
+
+
+Una vez visto a grandes rasgos el dataset, procedo a realizar lo solicitado por el ejercico.
+
+# 1) Propón la regresión para explicar el salario a través de los años de servicio y los años desde el doctorado. Justifica si era lo esperado o no y si difiere justificar la razón de dicho diferimiento. Obtén la suma de residuos al cuadrado, el coeficiente de determinación y el coeficiente de determinación corregido del modelo. 
+
+El modelo que se usará es entonces el siguiente:
+$$  Modelo 1 -> \hat{Salary}=\beta_0+\beta_1 yrs.since.phd +\beta_2yrs.service  $$
+
+
+```{r fórmula}
+# Establecemos la formula para  más adelate modelizar. 
+formula<-as.formula('salary ~ yrs.since.phd + yrs.service')
+formula
+```
+
+
+```{r modelo 1,  warning=FALSE,message=FALSE}
+modelo1<-lm(formula = formula,data =Salaries)
+summary(modelo1)
+```
+Mirando el resumen de la regresión, se observa que ambas variables explicativas son estadísticamente significativas al 5%. Si analizamos los betas, se observa que por cada año desde que el profesor culminó el phd, se esperaría que el salario aumentase (disminuyese) en promedio en 1562,9, lo cual puede ser lógico en virtud de que implicaría que la persona tiene más años de experiencia y por ende ganaría más. Lo que no aparece como lógico es el signo del beta de años de servicio, ya que es negativo, lo que implicaría que a mayor cantidad de años de servicio, menor sería el salario. Quizás la relación entre salario y años de servicio no sea lineal. Esto lo analizaremos por medio de gráficos.
+
+
+```{r gráfico yrs.since.phd}
+Salaries %>% 
+      ggplot(aes(yrs.since.phd,salary))+
+      geom_point()+
+      geom_smooth(method = lm)
+
+```
+Si bien el beta es positivo para la variable yrs.since.phd, se observa que aproximadamente a partir de los 40 años el salario, en términos generales, disminuye a medida que se incrementan los años transcurridos desde que se terminó el Phd. Esto podría estar evidenciando que la relación no es tan lineal. 
+
+
+```{r gráfico yrs.service}
+Salaries %>% 
+      ggplot(aes(yrs.service,salary))+
+      geom_point()+
+      geom_smooth(method = lm)
+
+```
+Con esta variable sucede algo similar, pero parece que a partir de 20 y algo de años de servicio el salario disminuye al incrementar los años. Quizás es por esto que el beta es negativo.
+
+También puede suceder que haya un problema de multicolinealidad, es decir correlación fuerte entre las dos variables regresoras de este modelo. Si se toma en cuenta que probablemente para acceder a un cargo de profesor de estas universidades sea requisito o un mérito relevante para obtener dicho cargo, entonces a medida que un profesor tiene mayor cantidad de años de experiencia más años habrán pasado desde que obtuvo su Phd. Es de esperar que tengan una correlación positiva entre sí. Se analiza entonces la correlación entre esas dos variables, así como el factor de inflación de la varianza (FIV o VIF).
+
+
+```{r}
+Salaries %>% 
+      dplyr::select(yrs.since.phd,
+                    yrs.service
+                    ) %>% 
+      cor()
+```
+Claramente las dos variables presentan una correlación positiva alta, ya que es cercana a 1. Se analiza el VIF del modelo.
+
+```{r VIF}
+vif(modelo1)
+```
+El VIF es superior a 5, existiendo una correlación alta, por lo que puede no ser confiable el beta de años de servicio.
+
+A continuación se calculan los coeficientes de determinación y de determinación ajustado
+
+```{r coeficientes y SCR}
+
+
+paste("El coeficiente de determinación es:", round(summary(modelo1)$r.squared,4))   
+paste("El coeficiente de determinación ajustado es:", round(summary(modelo1)$adj.r.squared,4))
+paste("La suma del cuadrado de los residuos es:", round(deviance(modelo1),4))
+```
+Se observa que el modelo solo explica aproximadamente el 18% de la varianza del salario. Tomando estos dos indicadores no parecería ser un buen modelo. 
+Por otra parte, la suma del cuadrado de los residuos parecería ser una suma bastante alta, si bien se están analizando salarios.
+
+De todo lo visto anteriormente, parecería que hay que modificar el modelo para tener un mejor ajuste.
+
+
+# 2) Incluye el género en el modelo. Valora la nueva suma de residuos al cuadrado. 
+
+Primero creamos la fórmula para el modelo.
+```{r fórmula modelo 2}
+# Establecemos la formula para  más adelate modelizar. 
+formula<-as.formula('salary ~ yrs.since.phd + yrs.service + sex')
+formula
+```
+
+Indica cómo incrementa el salario ante una variación en los años de servicio. 
+
+```{r modelo 2}
+modelo2 <- lm(formula = formula,data =Salaries)
+summary(modelo2)
+```
+Analizando las dos variables de años, se observa que las dos siguen siendo estadísticamente significativas con un alfa del 5%, y el signo de las mismas es igual al modelo 1 visto en el ejercicio anterior, eso no se ha visto modificado por agregar la variable sex en el modelo, si bien el valor de los betas si varío un poco.
+
+Resta analizar la variable sex la cual, como ya se vió anteriormente, es un factor que tiene categoría male y female. Cuando es un factor y se hace un modelo, R automáticamente crea una variable binaria que implica la ausencia o presencia de una categoría. En este caso, la variable en el modelo aparece como sexMale, la cual sería una variable binaria que asume valor 1 si es hombre o 0 si es mujer. Esto implica que, al interpretar el beta de esta variable, el hecho de que un profesor sea hombre es de esperar que su salario, en promedio, sea superior en 8.457 dólares a los de una mujer. Esto podría tener sentido en virtud de la brecha salarial de género que existe en el mercado laboral. Algo importante a observar es que esta variable es significativa con un alfa del 10% (el p-valor es del 7%).
+
+Resta analizar la suma de cuadrado de los residuos.
+
+```{r SCR modelo 2}
+paste("La suma de cuadrado de los residuos (SCR) del modelo 2 es:", 
+      deviance(modelo2))
+
+paste("Esta SCR del modelo 2 es menor a la del modelo 1 en:",
+      deviance(modelo1)-deviance(modelo2))
+```
+Se observa que con este segundo modelo la SCR ha disminuido significativamente, y el coeficiente de determinación es superior, lo cual sugiere que este modelo ajusta mejor que el modelo 1, pero aún queda espacio para mejorar.
+
+#3) Justifica, a través del coeficiente de determinación corregido, si el género es una variable a tener en cuenta para mejorar el modelo de predicción del salario.
+
+El coeficiente de determinación ajustado castiga la incorporación de nuevas variables al modelo, como forma de mantener la parsimonia de los modelos. Comparo a continuación los coeficientes de determinación comunes y ajustados de cada modelo.
+
+```{r}
+#modelo 1
+paste("El coeficiente de determinación del modelo 1 es:", 
+      round(summary(modelo1)$r.squared,4))   
+
+paste("El coeficiente de determinación ajustado del modelo 1 es:", round(summary(modelo1)$adj.r.squared,4))
+
+
+#modelo 2
+paste("El coeficiente de determinación del modelo 2 es:", 
+      round(summary(modelo2)$r.squared,4))   
+
+paste("El coeficiente de determinación ajustado del modelo 2 es:",
+      round(summary(modelo2)$adj.r.squared,4))
+```
+Se observa que el R cuadrado ajustado del modelo 2 es superior tanto al coeficiente de determinación común del modelo 1, como al coeficiente de determinación ajustado del mismo, lo cual parecería indicar que agregar la variable de sexo a este modelo debe ser tenida en cuenta.
+
+Además, debe tenerse presente que exista vasta literatura académica que establece que el sexo es una variable significativa para explicar salarios, y que la brecha salarial entre hombres y mujeres existe en prácticamente todo el mundo. Teóricamente también es una variable a considerar.
+
+
+# 4) Indica cómo incrementa el salario ante una variación en los años de servicio. 
+
+Analizando el beta de la variable de años de servicio para los dos modelos vistos, se vió que en los dos modelos el mismo es negativo, lo que implicaría que ante un incremento (decremento) de los años de servicio, en promedio, es de esperar que el salario disminuya (aumente). A continuación se observan el valor de dichos coeficientes.
+
+```{r años de servicio de los modelos}
+#beta años de servicio modelo 1
+paste("El beta de los años de servicio del modelo 1 es",
+      round(modelo1$coefficients["yrs.service"],2))
+
+#beta años de servicio modelo 2
+paste("El beta de los años de servicio del modelo 2 es",
+      round(modelo2$coefficients["yrs.service"],2))
+```
+En el modelo 1, entonces, un incremento (disminución) de 1 año de servicio implicaría un decrecimiento (crecimiento) del salario en 629,1 dólares. En el caso del modelo 2, con el aumento (baja) de 1 año de servicio se esperaría una disminución (incremento) de 649.76 dólares.
+
+Por otra parte, en el ejercicio 1 se analizó un gráfico de dispersión entre salario y años de servicio, y se observó que la relación no parecería ser tan lineal. Quizás habría que elevar al cuadrado la variable, o realizar un punto de corte en esta variable y utilizar diferentes betas.
+
+#5) Indica cómo afecta a las betas del modelo si dividimos el salario por mil para expresarlo en miles.
+
+Especificamos la fórmula del modelo, dividiendo al salario entre mil.
+
+```{r fórmula modelo 3}
+# Establecemos la formula del modelo 3
+formula<-as.formula('salary/1000 ~ yrs.since.phd + yrs.service + sex')
+formula
+```
+
+Indica cómo incrementa el salario ante una variación en los años de servicio. 
+
+```{r modelo 3}
+modelo3 <- lm(formula = formula,data =Salaries)
+summary(modelo3)
+```
+Se observa que tanto la constante beta 0, como los betas de las 3 variables regresoras son las mismas que se vieron en el modelo 2, pero dividido entre mil, tal como se muestra en la siguiente Salaries.
+
+```{r betas modelo 2 y 3}
+#saco los coeficientes de los modelos 2 y 3
+Salaries_modelos <- rbind(modelo2$coefficients,modelo3$coefficients) 
+row.names(Salaries_modelos) <- c("modelo 2","modelo 3")
+
+#Muestro la Salaries
+Salaries_modelos
+
+```
+El cambio solo se produce en cómo está expresado el modelo, que será en miles de dólares. 
+
+
+Por otra parte, los p valores y los coeficientes de determinación son iguales en ambos modelos.
+
+#6) Con el modelo anterior, teniendo en cuenta años de servicio y años desde el doctorado, realiza el mismo modelo, pero con el logaritmo neperiano del salario. Indica si se mantienen los signos de las betas obtenidas. 
+
+Especificamos la fórmula del modelo, pero esta vez aplicando logaritmo neperiano sobre salario.
+
+```{r fórmula modelo 4}
+# Establecemos la formula del modelo 4 y hago el summary del modelo
+formula<-as.formula('log(salary) ~ yrs.since.phd + yrs.service ')
+modelo4 <- lm(formula = formula,data =Salaries)
+summary(modelo4)
+```
+
+
+Se observa que las dos variables analizadas continúan siendo estadísticamente significativas al 5%. Por otra parte, los signos no han cambiado haciendo el logaritmo, yrs.since.phd sigue teniendo signo positivo y yrs.service mantiene su signo negativo. Lo que sí cambia, al haber hecho una transformación logarítmica de la variable explicada, es la interpretación de estos betas, lo cual seexplica en el siguiente ejercicio.
+
+#7) Indica cómo incrementa el salario ante una variación, en los años de servicio en este nuevo modelo. 
+
+En este caso, si multiplicamos los betas por 100, obtenemos la variación porcentual del salario, ante el cambio de una unidad en términos absolutos de la variable independiente que corresponda.
+
+Por lo tanto, esto implica que al aumentar un año desde la finalización del Phd de un profesor, el salario aumentaría en aproximadamente 1,35%. En el caso de los años de servicio, un aumento de un año implicaría un descenso de 0,53% del salario. Esto se sconoce como semielasticidad. Se obtiene el cambio relativo (porcentual) de la variable respuesta, ante el cambio de una unidad en valores absolutos de una variable independiente.
+
+#8) Utilizando un modelo de regresión lineal (lm), realiza una modelización correcta del salario (utilizando las variables que desees de la base de datos) y presenta los resultados argumentando, desde tu conocimiento, las razones por las que eliges dicho modelo.
+
+Para determinar la selección de variables para un modelo muchas veces resulta útil el conocimiento del negocio, así como la revisión de literatura sobre el tema. Existen papers, artículos académicos que ya han estudiado como se forman los salarios de los profesores universitarios. Al respecto, tanto Koch y Chizmar (1973), como  Twigg, Valentine, y Elias (2002) tratan de analizar las distintas variables que explican los salarios de profesores universitarios en diferentes universidades. En ambos estudios la variable sexo y el rango académico resultan significativas. En el estudio de Koch y Chizmar se establece que la cantidad de años desde que el profesor tiene el Phd es también relevante. Algo interesante a destacar es que, al igual que como ocurre con el dataset del presente ejercicio, en el paper de  Twigg, Valentine, y Elias (2002), el beta de años de servicio es también de signo negativo. Asimismo, dichos autoressostienen que hay diferencias según las disciplinas de los profesores (por ejemplo entre Administración e Ingeniería).
+
+De todo lo anteriormente señalado, parecería desde un punto de vista teórico que todas las variables podrían usarse en el modelo, aunque no necesariamente los salarios de este dataset deban comportarse igual que las muestras analizadas por los papers reseñados. Si bien los dos papers mencionados usan datos de Estados Unidos, hacen referencia a otros períodos de tiempo (el dataset es de 2008-2009, según los datos de la ayuda).
+
+Empezarpe entonces con la siguiente formulación, y luego iré ajustando el modelo.
+
+```{r fórmula modelo 5}
+# Establecemos la formula del modelo 5
+formula<-as.formula('salary ~ rank +  discipline +  yrs.since.phd + yrs.service + sex')
+modelo5 <- lm(formula = formula,data =Salaries)
+summary(modelo5)
+
+```
+Se observa que en este modelo la única variable que no es estadísticamente significativa es el sexo. En virtud de esto es que decido sacarla del modelo.
+
+
+```{r fórmula modelo 6}
+# Establecemos la formula del modelo 6
+formula<-as.formula('salary ~ rank +  discipline +  yrs.since.phd + yrs.service ')
+modelo6<-lm(formula = formula, data = Salaries)
+summary(modelo6)
+```
+Se observa que todas las variables de este modelo 6 son estadísticamente significativas. A este mismo modelo se llega también si se aplica sobre el modelo 5 con todas las variables, el método de selección Stepwise de la forma backwards.
+
+```{r stepwise backwards}
+backward<-stepAIC(modelo5,trace=FALSE,direction="backward")
+backward$anova
+```
+Cabe destacar que este modelo tiene un coeficiente de determinación bastante bajo.
+```{r}
+Salaries$years_bef_40<-((40-Salaries$yrs.service)<0)*0+((40-Salaries$yrs.service)>=0)*(40-Salaries$yrs.service)
+Salaries$years_aft_40<-((Salaries$yrs.service-40)<0)*0+((Salaries$yrs.service-40)>=0)*(Salaries$yrs.service-40)
+```
+
+```{r fórmula modelo 7}
+# Establecemos la formula del modelo 7
+formula<-as.formula('salary ~ rank +  discipline +  yrs.since.phd +years_bef_40+years_aft_40 ')
+modelo7<-lm(formula = formula, data = Salaries)
+summary(modelo7)
+```
+
+```{r}
+layout(matrix(c(1,2),1,2,byrow=T))
+
+#Histogram of Residuals
+hist(modelo6$residuals, main="Histograma de residuos", ylab="Residuos")
+#q-qPlit
+qqnorm(modelo6$residuals)
+qqline(modelo6$residuals)
+#Jarque Bera
+jarqueberaTest(modelo6$residuals)
+```
+
+
+
+
+Bibliografía
+
+* Koch, J. V., & Chizmar, J. F. (1973). The influence of teaching and other factors upon absolute salaries and salary increments at Illinois State University. The Journal of Economic Education, 5(1), 27-34.
+
+
+* Twigg, N. W., Valentine, S. R., & Elias, R. Z. (2002). A comparison of salary compression models and pay allocation in academia over time. The Review of Higher Education, 26(1), 81-96.
+
+
